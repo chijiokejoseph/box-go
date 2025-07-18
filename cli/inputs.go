@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 )
 
-var QuitErr = errors.New("player has quit operation")
-var SysInputErr = errors.New("system input operation failed")
-var ParseIntErr = errors.New("failed to parse str input to int")
+var ErrQuit = errors.New("player has quit operation")
+var ErrSysInput = errors.New("system input operation failed")
+var ErrParseInt = errors.New("failed to parse str input to int")
 var promptWords = [3]string{
 	"enter",
 	"choose",
@@ -31,12 +32,13 @@ const quitPrompt = "\nEnter 'q', 'quit', 'e', or 'exit' to stop the current oper
 // This informs the user on how to exit the
 // current operation
 //
-//   - prompt - the string to be printed out
+//   - prompt: the string to be printed out
 //     to the user
 //     with the aim of requesting user input
 //
-// Returns: string with the prompt clause for
-// cancelling the current operation added
+// Returns: 
+// 	string with the prompt clause for
+// 	cancelling the current operation added
 func modPrompt(prompt string) string {
 	promptLower := strings.ToLower(prompt) // get `prompt` in lowercase
 	for _, word := range promptWords {
@@ -69,56 +71,102 @@ func isTrimmable(str string) bool {
 //
 // Returns:
 //
-// (string) - the read string with trailing whitespaces and newlines
-// trimmed.
-//
-// (error) - The error that occurs in the program. Note that an end
-// of file error (io.EOF) is not considered an error in this
-// function
+// 	(string) - the read string with trailing whitespaces and newlines
+// 		trimmed.
+// 	(error) - The error that occurs in the program. Note that an end
+// 		of file error (io.EOF) is not considered an error in this
+// 		function
 func Input(reader *bufio.Reader, prompt string) (string, error) {
 	fmt.Printf("%s: ", modPrompt(prompt))
 	resp, err := reader.ReadString('\n')
+
+	// check for non-nil errors that are not io.EOF
 	if err != nil && err != io.EOF {
-		return "", fmt.Errorf("%w. %w", SysInputErr, err)
+		return "", fmt.Errorf("%w. %w", ErrSysInput, err)
 	}
+
+	// trim all whitespaces in the user's response
 	resp = strings.Trim(resp, "\n")
 	for isTrimmable(resp) {
 		resp = strings.Trim(resp, " ")
 	}
+
+	// handle quit or exit messages
 	if slices.Contains(quitWords[:], strings.ToLower(resp)) {
-		return "", QuitErr
+		return "", ErrQuit
 	}
+
 	return resp, nil
 }
 
+// InputNum prompts a user to enter a number.
+// It returns the number and the error encountered
+// when parsing the user input to a valid int.
+//
+// 	- reader: a bufio reader that reads user input
+// 	- prompt: the instruction printed out to the user
+// 
+// Returns:
+// 
+// 	(int) - the number entered from the console by the user
+// 	(error) - the error encountered when parsing user input
 func InputNum(reader *bufio.Reader, prompt string) (int, error) {
+	// get user input
 	resp, err := Input(reader, prompt)
 	if err != nil {
 		return 0, err
 	}
-	var value int
-	_, err = fmt.Sscanf(resp, "%d", &value)
+	
+	// convert user input to int
+	value, err := strconv.Atoi(resp)
 	if err != nil {
-		return 0, fmt.Errorf("%w. %w", ParseIntErr, err)
+		return 0, fmt.Errorf("%w. %w", ErrParseInt, err)
 	}
+
 	return value, nil
 }
 
-func InputOption(reader *bufio.Reader, options []string, prompt string, title ...string) (idx int, option string, err error) {
+
+// InputOption prompts the user to select an option
+// from a list of available choices.
+//
+// 	- reader: a reader that reads user input from stdin
+// 	- options: holds the list of prompt
+// 	- prompt: the instructions to be displayed to the user
+// 	- title: a semi-optional field that can be empty. when
+// 		given a single argument, it specifies the `menuTitle`
+// 		variable in the function.
+//
+// Returns:
+//
+// 	(num int): the position of the selected option starting
+//		from 1
+// 	(option string): the corresponding option selected by 
+//		the user based off his input
+// 	(err error): the error encountered while executing the
+// 		the function
+func InputOption(reader *bufio.Reader, options []string, prompt string, title ...string) (num int, option string, err error) {
+	// set menuTitle to default and update if specified
+	// in the function call
 	menuTitle := "Select from the following: "
 	if len(title) == 1 {
 		menuTitle = title[0]
 	}
+	
 	fmt.Printf("%s\n", menuTitle)
+
+	// display options
 	for i := range options {
 		fmt.Printf("%d. %s\n", i+1, options[i])
 	}
 	fmt.Println()
-	resp, err := InputNum(reader, prompt)
+
+	// read user option choice as int
+	num, err = InputNum(reader, prompt)
 	if err != nil {
 		return 0, "", err
 	}
-	idx = resp - 1
-	option = options[idx]
-	return idx, option, nil
+
+	option = options[num - 1]
+	return num, option, nil
 }
